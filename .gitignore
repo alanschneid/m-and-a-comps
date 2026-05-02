@@ -216,3 +216,27 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# ──────── Project-specific (M&A Comps) ────────
+
+# Cached SEC filings (large files, regenerable)
+filings_cache/
+*.html
+*.htm
+*.xml
+
+# Generated Excel outputs (testing artifacts)
+output/
+*.xlsx
+*.xls
+
+# Logs
+*.log
+logs/
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store

@@ -1,0 +1,26 @@
+# ──────── M&A Comps Auto-Refresh — Dependencies ────────
+
+# HTTP requests (for SEC EDGAR API calls)
+requests>=2.32.0
+
+# HTML parsing (for SEC filings, since they come as messy HTML)
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
+# Data manipulation
+pandas>=2.2.0
+
+# Excel generation with formatting (banker-style output)
+openpyxl>=3.1.0
+
+# Claude API (for extracting structured data from filings)
+anthropic>=0.97.0
+
+# Web interface
+streamlit>=1.56.0
+
+# Type hints support (stdlib in 3.10+, but keep explicit for clarity)
+# (no install needed — built-in)
+
+# For .env files in dev (optional but standard)
+python-dotenv>=1.0.0
