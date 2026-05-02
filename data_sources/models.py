@@ -28,7 +28,7 @@ class DealReference:
     target_ticker: Optional[str] = None
     sic_code: Optional[str] = None    # industry classification (used for sector filtering)
     raw_filing_url: Optional[str] = None
-
+    source_specific_id: Optional[str] = None    # source-specific helper (e.g. CIK for SEC)
 
 # ──────── Full deal details returned by get_deal_details() ────────
 
