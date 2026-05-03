@@ -240,3 +240,6 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
+# Throwaway development scripts
+explore.py
+scratch.py

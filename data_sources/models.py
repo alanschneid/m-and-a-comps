@@ -67,24 +67,31 @@ class DealDetails:
 @dataclass
 class TargetFinancials:
     """
-    LTM financials of the target company at announcement.
-    Sourced from S-4/DEFM14A or other proxy filings.
+    Target company financials at or near deal date.
+    
+    Sourced from the most recent 10-K available before the announcement.
+    EBITDA is NOT extracted — see project README for rationale (definitional
+    ambiguity, frequent absence in tech-target financials).
+    
     All figures in USD millions.
     """
     deal_ref: DealReference
 
+    # Income statement (LTM = most recent fiscal year-end at extraction time)
     ltm_revenue_usd_mm: Optional[float] = None
-    ltm_ebitda_usd_mm: Optional[float] = None
     ltm_ebit_usd_mm: Optional[float] = None
     ltm_net_income_usd_mm: Optional[float] = None
-    net_debt_usd_mm: Optional[float] = None     # used to bridge equity value → enterprise value
+
+    # Balance sheet
+    net_debt_usd_mm: Optional[float] = None       # Total Debt - Cash
     cash_usd_mm: Optional[float] = None
     total_debt_usd_mm: Optional[float] = None
 
-    # Forward estimates (often disclosed in fairness opinion projections)
+    # Forward (only populated when management projections were disclosed)
     fy1_revenue_usd_mm: Optional[float] = None
-    fy1_ebitda_usd_mm: Optional[float] = None
 
-    # Provenance — which filing the data came from
+    # Provenance
     source_filing_url: Optional[str] = None
-    source_filing_type: Optional[str] = None    # "S-4", "DEFM14A", "8-K", etc.
+    source_filing_type: Optional[str] = None      # "10-K", "10-K (FY2022)", or "NOT_FOUND"
+    ltm_period_end: Optional[str] = None
+    data_completeness_note: Optional[str] = None  # explains what was/wasn't found
