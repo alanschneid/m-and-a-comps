@@ -19,6 +19,7 @@ from typing import Optional
 from anthropic import Anthropic
 
 from data_sources.models import DealDetails, TargetFinancials
+from my_deal import MyDeal
 
 
 # ──────── Configuration ────────
@@ -153,4 +154,111 @@ competitive or strategic gap is it filling, what does the timing or
 structure tell you. 3-5 sentences. No headers. No platitudes.
 
 {facts_block}{fin_block}{adv_block}
+"""
+
+# ──────── Prompt: Comparability Assessment ────────
+
+SYSTEM_PROMPT_COMPARABILITY = """\
+You are a senior M&A analyst at an elite European investment banking
+boutique. You evaluate how comparable an executed transaction is to a
+new deal a colleague is working on.
+
+Your audience is the deal team — they need a quick, sharp assessment
+of whether a precedent transaction is relevant to their work.
+
+Good comparability assessment is:
+    - Specific about WHY it's comparable or not (sector, size, structure,
+      vintage, acquirer type, strategic logic)
+    - Honest about limitations — most deals are partially comparable
+    - Useful for downstream analysis — explicitly tells the deal team
+      what they CAN and CANNOT use this precedent for
+
+Format requirements:
+    - First line: rating in stars (1-5) and a one-word verdict
+      Examples: "★★★★☆ Strong", "★★★☆☆ Moderate", "★★☆☆☆ Weak", "★☆☆☆☆ Marginal"
+    - Then: 2-4 bullet points on Pros (what makes it comparable)
+    - Then: 2-3 bullet points on Cons (where the comparison breaks down)
+    - End with one "Bottom line:" sentence stating the practical use
+
+Output is plain text with simple bullet markers (- or •).
+Total output: 8-12 lines maximum.
+"""
+
+
+def generate_comparability_assessment(
+    brief_deal: DealDetails,
+    my_deal: "MyDeal",
+    financials: Optional[TargetFinancials] = None,
+) -> str:
+    """
+    Generate a comparability assessment for a deal in the brief, scoring
+    its relevance to the user's own deal.
+
+    Args:
+        brief_deal: a deal from the brief (DealDetails extracted from filing)
+        my_deal: the user's own deal context (MyDeal dataclass)
+        financials: optional, target financials of the brief deal
+
+    Returns:
+        Star-rated comparability commentary, 8-12 lines.
+        Returns fallback message on API error.
+    """
+    user_prompt = _build_comparability_prompt(brief_deal, my_deal, financials)
+
+    try:
+        response = _call_claude(
+            system_prompt=SYSTEM_PROMPT_COMPARABILITY,
+            user_prompt=user_prompt,
+        )
+        return response.strip()
+    except Exception as exc:
+        print(f"[commentary] Comparability assessment failed: {exc}")
+        return f"[Comparability unavailable — API error: {exc}]"
+
+
+def _build_comparability_prompt(
+    brief_deal: DealDetails,
+    my_deal: "MyDeal",
+    financials: Optional[TargetFinancials],
+) -> str:
+    """Construct the user prompt with both deals' context."""
+    ref = brief_deal.deal_ref
+
+    # Brief deal facts
+    brief_lines = [
+        f"Acquirer: {ref.acquirer_name}",
+        f"Target: {ref.target_name}",
+        f"Announced: {ref.announcement_date}",
+        f"Equity Value: USD {brief_deal.equity_value_usd_mm:,.0f} mm" if brief_deal.equity_value_usd_mm else None,
+        f"Consideration: {brief_deal.consideration_type}" if brief_deal.consideration_type else None,
+        f"Premium: {brief_deal.premium_pct:.0%}" if brief_deal.premium_pct else None,
+    ]
+    if financials and financials.ltm_revenue_usd_mm:
+        brief_lines.append(f"Target LTM Revenue: USD {financials.ltm_revenue_usd_mm:,.0f} mm")
+    if financials and financials.ltm_ebit_usd_mm is not None:
+        brief_lines.append(f"Target LTM EBIT: USD {financials.ltm_ebit_usd_mm:,.0f} mm")
+
+    brief_block = "\n  ".join(line for line in brief_lines if line)
+
+    # My deal context
+    my_lines = [f"Target: {my_deal.my_target}"]
+    if my_deal.my_acquirer:
+        my_lines.append(f"Acquirer: {my_deal.my_acquirer}")
+    if my_deal.deal_thesis:
+        my_lines.append(f"Thesis: {my_deal.deal_thesis}")
+
+    my_block = "\n  ".join(my_lines)
+
+    return f"""\
+Assess how comparable the following EXECUTED DEAL (from the brief) is to
+MY DEAL (the one I'm working on).
+
+EXECUTED DEAL:
+  {brief_block}
+
+MY DEAL:
+  {my_block}
+
+Output the comparability assessment in the format described in the system
+prompt. Be sharp, specific, and honest about limitations.
 """
