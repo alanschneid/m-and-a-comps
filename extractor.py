@@ -42,6 +42,11 @@ You output ONLY valid JSON, no commentary. Use null for any field that
 cannot be determined with high confidence from the filing text. Never
 guess — accuracy matters more than completeness.
 
+Distinguish FINANCIAL advisors (investment banks, M&A boutiques like
+Goldman Sachs, Morgan Stanley, Qatalyst Partners, Tidal Partners) from
+LEGAL advisors (law firms, typically ending in "LLP" — Skadden, Sullivan
+& Cromwell, Cravath, Simpson Thacher).
+
 All monetary amounts must be in USD millions (convert if needed).
 Premium percentages must be expressed as decimals (e.g. 0.42 for 42%).
 """
@@ -63,8 +68,10 @@ this exact schema:
   "stock_exchange_ratio": number or null,
   "unaffected_price_usd": number or null,
   "premium_pct": number or null,
-  "advisors_acquirer": [string],
-  "advisors_target": [string],
+  "financial_advisors_acquirer": [string],
+  "legal_advisors_acquirer": [string],
+  "financial_advisors_target": [string],
+  "legal_advisors_target": [string],
   "termination_fee_acquirer_usd_mm": number or null,
   "termination_fee_target_usd_mm": number or null,
   "expected_close_date": string or null,
@@ -253,8 +260,10 @@ def _empty_deal_details() -> dict:
         "stock_exchange_ratio": None,
         "unaffected_price_usd": None,
         "premium_pct": None,
-        "advisors_acquirer": [],
-        "advisors_target": [],
+        "financial_advisors_acquirer": [],
+        "legal_advisors_acquirer": [],
+        "financial_advisors_target": [],
+        "legal_advisors_target": [],
         "termination_fee_acquirer_usd_mm": None,
         "termination_fee_target_usd_mm": None,
         "expected_close_date": None,

@@ -52,8 +52,10 @@ class DealDetails:
     premium_pct: Optional[float] = None         # vs unaffected, expressed as 0.42 = 42%
 
     # Process
-    advisors_acquirer: list[str] = field(default_factory=list)
-    advisors_target: list[str] = field(default_factory=list)
+    financial_advisors_acquirer: list[str] = field(default_factory=list)
+    legal_advisors_acquirer: list[str] = field(default_factory=list)
+    financial_advisors_target: list[str] = field(default_factory=list)
+    legal_advisors_target: list[str] = field(default_factory=list)
     termination_fee_acquirer_usd_mm: Optional[float] = None
     termination_fee_target_usd_mm: Optional[float] = None
 

@@ -88,26 +88,46 @@ class SECEdgarSource(DataSource):
         return refs
 
     def get_deal_details(self, ref: DealReference) -> DealDetails:
-        """Resolve the 8-K, fetch it, run extractor, return DealDetails."""
-        primary_url = self._resolve_primary_document_url(ref)
-        if primary_url is None:
-            print(f"[sec_edgar] Could not resolve primary document for {ref.deal_id}")
+        """
+        Resolve the 8-K body + its press release exhibit (if any), fetch
+        both, concatenate, and run the extractor. Press releases (ex99-1)
+        contain advisor names and structured deal terms that the 8-K body
+        often summarizes only briefly.
+        """
+        document_urls = self._resolve_8k_document_urls(ref)
+        if not document_urls:
+            print(f"[sec_edgar] Could not resolve documents for {ref.deal_id}")
             return DealDetails(deal_ref=ref)
 
-        print(f"[sec_edgar] Fetching 8-K for deal {ref.deal_id}...")
-        filing_html = self._client.get(primary_url)
+        print(f"[sec_edgar] Fetching 8-K body and press release for {ref.deal_id}...")
+        combined_text = ""
+        for label, url in document_urls:
+            try:
+                content = self._client.get(url)
+                combined_text += f"\n\n=== {label} ===\n\n{content}"
+            except Exception as exc:
+                print(f"[sec_edgar] Failed to fetch {label}: {exc}")
 
-        print(f"[sec_edgar] Extracting deal details via Claude...")
-        extracted = extract_deal_details(filing_html, source_hint="SEC 8-K Item 1.01")
+        if not combined_text:
+            return DealDetails(deal_ref=ref)
 
+        print(f"[sec_edgar] Extracting deal details via Claude (combined input)...")
+        extracted = extract_deal_details(
+            combined_text,
+            source_hint="SEC 8-K Item 1.01 (body + press release exhibit)",
+        )
+
+        # Patch the DealReference with the acquirer name from extraction
         if extracted.get("acquirer_name"):
             ref.acquirer_name = extracted["acquirer_name"]
         if extracted.get("target_name"):
             ref.target_name = extracted["target_name"]
-        ref.raw_filing_url = primary_url
+
+        # Use the body URL as the canonical raw_filing_url
+        ref.raw_filing_url = document_urls[0][1]
 
         return self._dict_to_deal_details(ref, extracted)
-
+    
     def get_target_financials(self, ref: DealReference) -> TargetFinancials:
         """
         Locate the target's most recent 10-K filed BEFORE the deal
@@ -211,11 +231,22 @@ class SECEdgarSource(DataSource):
 
     # ──────── Internal helpers — 8-K resolution ────────
 
-    def _resolve_primary_document_url(self, ref: DealReference) -> Optional[str]:
-        """Find the URL of the primary 8-K document within the filing folder."""
+    def _resolve_8k_document_urls(
+        self, ref: DealReference
+    ) -> list[tuple[str, str]]:
+        """
+        Find URLs of the 8-K body and its press release exhibit (ex99-1).
+
+        Returns a list of (label, url) tuples in priority order:
+            [("8-K body", url), ("Press Release", url), ...]
+
+        The 8-K body is always first if found. The press release exhibit
+        (typically ex99-1) is second if present — it contains advisor names,
+        executive quotes, and structured deal terms not in the body itself.
+        """
         cik = ref.source_specific_id
         if cik is None:
-            return None
+            return []
         accession_clean = ref.deal_id.replace("-", "")
         index_url = f"{EDGAR_ARCHIVES_BASE}/{int(cik)}/{accession_clean}/index.json"
 
@@ -223,20 +254,40 @@ class SECEdgarSource(DataSource):
             index = self._client.get_json(index_url)
         except Exception as exc:
             print(f"[sec_edgar] Failed to fetch index for {ref.deal_id}: {exc}")
-            return None
+            return []
 
         items = index.get("directory", {}).get("item", [])
-        candidates = [
+
+        # Filter to plausible HTML documents (no XBRL slices, no index files)
+        htm_files = [
             it["name"] for it in items
             if it.get("name", "").lower().endswith((".htm", ".html"))
             and "index" not in it.get("name", "").lower()
             and not XBRL_SLICE_PATTERN.match(it.get("name", ""))
         ]
-        if not candidates:
-            return None
+        if not htm_files:
+            return []
 
-        prioritized = sorted(candidates, key=lambda n: ("8k" not in n.lower(), n))
-        return f"{EDGAR_ARCHIVES_BASE}/{int(cik)}/{accession_clean}/{prioritized[0]}"
+        # Identify the 8-K body: filename contains "8k" but not exhibit prefix.
+        body_candidates = [
+            n for n in htm_files
+            if "8k" in n.lower() and "_ex" not in n.lower()
+        ]
+        body = body_candidates[0] if body_candidates else htm_files[0]
+
+        # Identify the press release exhibit: convention is ex99-1 (sometimes ex99_1).
+        press_release_candidates = [
+            n for n in htm_files
+            if "ex99-1" in n.lower() or "ex99_1" in n.lower()
+        ]
+        press_release = press_release_candidates[0] if press_release_candidates else None
+
+        base = f"{EDGAR_ARCHIVES_BASE}/{int(cik)}/{accession_clean}"
+        result: list[tuple[str, str]] = [("8-K body", f"{base}/{body}")]
+        if press_release:
+            result.append(("Press Release (ex99-1)", f"{base}/{press_release}"))
+
+        return result
 
     # ──────── Internal helpers — 10-K resolution ────────
 
@@ -324,8 +375,10 @@ class SECEdgarSource(DataSource):
             consideration_type=extracted.get("consideration_type"),
             unaffected_price_usd=extracted.get("unaffected_price_usd"),
             premium_pct=extracted.get("premium_pct"),
-            advisors_acquirer=extracted.get("advisors_acquirer") or [],
-            advisors_target=extracted.get("advisors_target") or [],
+            financial_advisors_acquirer=extracted.get("financial_advisors_acquirer") or [],
+            legal_advisors_acquirer=extracted.get("legal_advisors_acquirer") or [],
+            financial_advisors_target=extracted.get("financial_advisors_target") or [],
+            legal_advisors_target=extracted.get("legal_advisors_target") or [],
             termination_fee_acquirer_usd_mm=extracted.get("termination_fee_acquirer_usd_mm"),
             termination_fee_target_usd_mm=extracted.get("termination_fee_target_usd_mm"),
             deal_status=extracted.get("deal_status"),
